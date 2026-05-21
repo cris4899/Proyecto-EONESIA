@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REACTOR Nº4 — Tiro Parabólico de Grafito</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   ESTÉTICA SOVIÉTICA RETRO-FUTURISTA — TERMINAL CRT 1986
+   Paleta: Verde fósforo · Ámbar industrial · Gris hormigón · Rojo alerta
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --green:      #00ff46;
+  --green-dim:  #00a82d;
+  --green-glow: rgba(0,255,70,0.4);
+  --amber:      #ffb300;
+  --amber-dim:  #996c00;
+  --red:        #ff2200;
+  --red-dim:    #991400;
+  --concrete:   #1c1c1c;
+  --dark:       #030a03;
+  --panel-bg:   rgba(3,15,5,0.92);
+  --cyan:       #00ffcc;
+  --font-mono:  'Share Tech Mono', 'Courier New', monospace;
+  --font-crt:   'VT323', monospace;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--dark);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  cursor: crosshair;
+}
+
+/* ─── CANVAS CONTAINER ─────────────────────────────────────── */
+#game-canvas {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+}
+
+/* ─── EFECTO CRT GLOBAL ────────────────────────────────────── */
+#crt {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 100;
+
+  /* Líneas de escaneo */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.04) 0px,
+      rgba(0,0,0,0.04) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+
+  /* Viñeta de pantalla curva */
+  box-shadow: inset 0 0 120px rgba(0,0,0,0.85);
+}
+
+/* Barrido de scanline animado */
+#crt::before {
+  content: '';
+  position: absolute;
+  top: -100%; left: 0;
+  width: 100%; height: 60%;
+  background: linear-gradient(
+    transparent 0%,
+    rgba(0,255,70,0.015) 50%,
+    transparent 100%
+  );
+  animation: scanline 12s linear infinite;
+}
+
+/* Bordes de pantalla CRT */
+#crt::after {
+  content: '';
+  position: absolute; inset: 0;
+  border: 2px solid rgba(0,255,70,0.12);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 40px rgba(0,255,70,0.05),
+    0 0 40px rgba(0,0,0,0.9);
+}
+
+@keyframes scanline {
+  0%   { top: -100%; }
+  100% { top: 200%; }
+}
+
+/* ─── PARPADEO GENÉRICO ────────────────────────────────────── */
+@keyframes flicker {
+  0%,100%{ opacity:1 } 92%{ opacity:1 } 93%{ opacity:0.6 } 95%{ opacity:1 } 97%{ opacity:0.7 }
+}
+@keyframes blink {
+  0%,49%{ opacity:1 } 50%,100%{ opacity:0 }
+}
+@keyframes pulse-glow {
+  0%,100%{ box-shadow: 0 0 8px var(--green-glow) }
+  50%    { box-shadow: 0 0 24px var(--green-glow), 0 0 48px rgba(0,255,70,0.2) }
+}
+@keyframes pulse-amber {
+  0%,100%{ text-shadow: 0 0 6px var(--amber) }
+  50%    { text-shadow: 0 0 20px var(--amber), 0 0 40px rgba(255,179,0,0.4) }
+}
+@keyframes shake {
+  0%,100%{ transform:translateX(0) }
+  25%{ transform:translateX(-3px) }
+  75%{ transform:translateX(3px) }
+}
+
+/* ─── PANEL BASE ───────────────────────────────────────────── */
+.panel {
+  position: absolute;
+  background: var(--panel-bg);
+  border: 1px solid var(--green-dim);
+  padding: 10px 14px;
+  animation: pulse-glow 4s ease-in-out infinite, flicker 8s infinite;
+  backdrop-filter: blur(2px);
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--green);
+}
+.panel::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, rgba(0,255,70,0.01) 0px, rgba(0,255,70,0.01) 1px,
+    transparent 1px, transparent 4px
+  );
+  pointer-events: none;
+}
+
+.panel-title {
+  font-family: var(--font-crt);
+  font-size: 14px;
+  color: var(--amber);
+  letter-spacing: 3px;
+  border-bottom: 1px solid var(--amber-dim);
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+  animation: pulse-amber 3s ease-in-out infinite;
+}
+
+/* ─── PANEL FÍSICA (arriba izquierda) ──────────────────────── */
+#panel-physics {
+  top: 14px; left: 14px;
+  width: 258px;
+}
+
+.formula-line {
+  font-size: 10px;
+  color: var(--cyan);
+  opacity: 0.85;
+  padding-left: 8px;
+  border-left: 2px solid rgba(0,255,204,0.3);
+}
+
+.val { color: var(--amber); }
+.val-green { color: var(--green); }
+
+/* ─── PANEL ESTADO (arriba derecha) ────────────────────────── */
+#panel-status {
+  top: 14px; right: 14px;
+  width: 230px;
+  text-align: right;
+}
+
+#feedback-line {
+  margin-top: 8px;
+  font-family: var(--font-crt);
+  font-size: 15px;
+  letter-spacing: 1px;
+  min-height: 20px;
+  color: var(--red);
+}
+
+.small-info {
+  margin-top: 10px;
+  font-size: 9px;
+  color: #334433;
+  line-height: 1.6;
+  border-top: 1px solid #111;
+  padding-top: 6px;
+}
+
+/* ─── PANEL CONTROLES (abajo centro) ───────────────────────── */
+#panel-controls {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 540px;
+  pointer-events: all;
+  text-align: center;
+}
+
+.controls-row {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.slider-label {
+  font-size: 10px;
+  color: var(--green-dim);
+  letter-spacing: 2px;
+}
+
+.slider-val {
+  font-family: var(--font-crt);
+  font-size: 20px;
+  color: var(--amber);
+  line-height: 1;
+  text-shadow: 0 0 10px var(--amber);
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 160px; height: 3px;
+  background: linear-gradient(to right, var(--green-dim) 0%, var(--dark) 100%);
+  border: 1px solid #003310;
+  outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--green-glow);
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 16px var(--green-glow);
+}
+
+.divider { width: 1px; height: 60px; background: #113311; }
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 9px 20px;
+  cursor: pointer;
+  border: 1px solid;
+  background: transparent;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.btn::before {
+  content: '';
+  position: absolute; top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: currentColor;
+  opacity: 0;
+  transition: left 0.2s, opacity 0.2s;
+}
+.btn:hover::before { left: 0; opacity: 0.15; }
+.btn:active { transform: scale(0.96); }
+
+.btn-launch {
+  color: var(--red); border-color: var(--red);
+  box-shadow: 0 0 10px rgba(255,34,0,0.3);
+  font-size: 14px; padding: 10px 28px;
+}
+.btn-launch:hover {
+  color: #000; background: var(--red);
+  box-shadow: 0 0 25px rgba(255,34,0,0.8);
+  animation: shake 0.3s ease;
+}
+.btn-launch:disabled {
+  opacity: 0.35; cursor: not-allowed;
+  box-shadow: none;
+}
+
+.hint-text {
+  font-size: 9px;
+  color: #224422;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* ─── BARRA DE PROGRESO OBJETIVOS ──────────────────────────── */
+#target-indicators {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.target-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--red-dim);
+  background: transparent;
+  transition: all 0.5s;
+  box-shadow: 0 0 4px rgba(255,34,0,0.3);
+}
+.target-dot.hit {
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 10px var(--green-glow);
+}
+
+/* ─── PANTALLA DE INSTRUCCIONES ────────────────────────────── */
+@keyframes typewriter {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes redpulse {
+  0%,100%{ box-shadow: 0 0 12px rgba(255,34,0,0.4), inset 0 0 12px rgba(255,34,0,0.08) }
+  50%    { box-shadow: 0 0 40px rgba(255,34,0,0.9), inset 0 0 30px rgba(255,34,0,0.15) }
+}
+@keyframes intro-bg-flicker {
+  0%,100%{ background-color: rgba(0,4,0,0.97) }
+  94%{ background-color: rgba(0,4,0,0.97) }
+  95%{ background-color: rgba(6,0,0,0.97) }
+  96%{ background-color: rgba(0,4,0,0.97) }
+  98%{ background-color: rgba(4,0,0,0.97) }
+}
+@keyframes slide-in {
+  from { opacity:0; transform: translateY(12px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+#screen-intro {
+  position: fixed; inset: 0;
+  background: rgba(0,4,0,0.97);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  font-family: var(--font-mono);
+  padding: 20px 20px 10px;
+  overflow-y: auto;
+  animation: intro-bg-flicker 6s infinite;
+}
+
+/* Franja roja de alerta superior */
+.intro-alert-bar {
+  width: 100%; max-width: 760px;
+  background: var(--red);
+  color: #000;
+  font-family: var(--font-crt);
+  font-size: 13px;
+  letter-spacing: 4px;
+  text-align: center;
+  padding: 6px 0;
+  animation: blink 0.6s step-end infinite;
+  margin-bottom: 0;
+}
+
+#screen-intro .logo {
+  font-family: var(--font-crt);
+  font-size: 58px;
+  letter-spacing: 12px;
+  color: var(--amber);
+  text-shadow: 0 0 40px var(--amber), 0 0 80px rgba(255,179,0,0.25);
+  animation: pulse-amber 1.8s ease-in-out infinite;
+  margin: 10px 0 2px;
+  text-align: center;
+}
+
+.intro-date-stamp {
+  font-size: 10px;
+  letter-spacing: 5px;
+  color: #445544;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+/* Caja principal */
+.intro-box {
+  border: 1px solid #331100;
+  background: rgba(8,4,0,0.92);
+  padding: 20px 28px;
+  max-width: 760px;
+  width: 100%;
+  box-shadow: 0 0 60px rgba(255,34,0,0.12), inset 0 0 30px rgba(255,34,0,0.04);
+  position: relative;
+  animation: redpulse 3s ease-in-out infinite;
+}
+.intro-box::before {
+  content: 'DOCUMENTO CLASIFICADO — NIVEL ROJO — МИНИСТЕРСТВО СРЕДНЕГО МАШИНОСТРОЕНИЯ';
+  position: absolute; top: -9px; left: 16px;
+  font-size: 8px; color: var(--red-dim);
+  background: rgba(8,4,0,0.92);
+  padding: 0 6px; letter-spacing: 2px;
+}
+
+/* Cabecera de misión */
+.intro-mission {
+  font-family: var(--font-crt);
+  font-size: 18px;
+  color: var(--red);
+  letter-spacing: 3px;
+  margin-bottom: 0;
+  border-bottom: 1px solid #330800;
+  padding-bottom: 8px;
+  text-shadow: 0 0 12px rgba(255,34,0,0.6);
+}
+
+/* Bloque de briefing dramático */
+.intro-briefing {
+  border-left: 3px solid var(--red-dim);
+  background: rgba(30,5,0,0.6);
+  padding: 12px 16px;
+  margin: 12px 0 8px;
+  font-size: 11px;
+  line-height: 2;
+  color: #cc9988;
+}
+.intro-briefing .data-line {
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #331100;
+  padding-bottom: 6px;
+}
+.intro-briefing b  { color: #ffccaa; }
+.intro-briefing em { color: var(--red); font-style: normal; font-weight: bold; }
+
+/* Contador de víctimas */
+.intro-casualties {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+}
+.casualty-box {
+  flex: 1;
+  border: 1px solid #330800;
+  background: rgba(20,3,0,0.8);
+  padding: 8px 10px;
+  text-align: center;
+}
+.casualty-num {
+  font-family: var(--font-crt);
+  font-size: 22px;
+  color: var(--red);
+  text-shadow: 0 0 10px rgba(255,34,0,0.6);
+  display: block;
+  line-height: 1.1;
+}
+.casualty-label {
+  font-size: 8px;
+  color: #553333;
+  letter-spacing: 1px;
+  margin-top: 2px;
+  display: block;
+}
+
+/* Bloque de física */
+.intro-physics {
+  background: rgba(0,20,14,0.7);
+  border-left: 3px solid var(--cyan);
+  padding: 10px 14px;
+  margin: 10px 0;
+  font-size: 10px;
+  color: var(--cyan);
+  line-height: 2;
+}
+.intro-physics strong {
+  font-size: 11px;
+  letter-spacing: 2px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Reglas de juego */
+.intro-rules {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0;
+}
+.rule-box {
+  border: 1px solid #113311;
+  background: rgba(0,12,4,0.7);
+  padding: 8px 10px;
+  font-size: 9px;
+  color: #557755;
+  line-height: 1.7;
+}
+.rule-box b { color: var(--amber); display: block; font-size: 10px; margin-bottom: 3px; letter-spacing: 1px; }
+.rule-box .rule-limit { color: var(--red); font-weight: bold; }
+
+/* Botón de inicio — EL ELEMENTO CENTRAL */
+#btn-start {
+  margin-top: 16px;
+  width: 100%;
+  font-size: 20px;
+  padding: 16px;
+  color: #000;
+  background: var(--red);
+  font-family: var(--font-crt);
+  letter-spacing: 5px;
+  cursor: pointer;
+  border: 2px solid #ff6644;
+  box-shadow:
+    0 0 30px rgba(255,34,0,0.7),
+    0 0 60px rgba(255,34,0,0.3),
+    inset 0 0 20px rgba(255,100,50,0.2);
+  transition: all 0.2s;
+  text-transform: uppercase;
+  animation: redpulse 1.2s ease-in-out infinite;
+}
+#btn-start:hover {
+  background: #ff4422;
+  color: #fff;
+  box-shadow:
+    0 0 60px rgba(255,34,0,1),
+    0 0 100px rgba(255,34,0,0.5);
+  transform: scale(1.01);
+}
+#btn-start:active {
+  transform: scale(0.98);
+}
+
+/* ─── PANEL CUENTA ATRÁS ───────────────────────────────────── */
+#panel-timer {
+  top: 38%; left: 88%;
+  transform: translate(-50%, -50%);
+  width: 140px;
+  text-align: center;
+  padding: 8px 12px;
+  pointer-events: none;
+}
+#timer-display {
+  font-family: var(--font-crt);
+  font-size: 54px;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 20px var(--green);
+  transition: color 0.5s, text-shadow 0.5s;
+}
+#timer-display.warn {
+  color: var(--amber);
+  text-shadow: 0 0 20px var(--amber);
+}
+#timer-display.critical {
+  color: var(--red);
+  text-shadow: 0 0 30px var(--red), 0 0 60px rgba(255,34,0,0.4);
+  animation: blink 0.5s step-end infinite;
+}
+.timer-label {
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: #334433;
+  margin-top: 2px;
+}
+
+/* Disparos restantes mini-display */
+#shots-remaining {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 6px;
+}
+.shot-pip {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 4px rgba(255,34,0,0.5);
+  transition: all 0.3s;
+}
+.shot-pip.used {
+  background: #1a0800;
+  box-shadow: none;
+  border: 1px solid #330800;
+}
+
+/* ─── OVERLAY FINAL ────────────────────────────────────────── */
+#screen-end {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,3,0,0.93);
+  z-index: 200;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+}
+
+#end-title {
+  font-family: var(--font-crt);
+  font-size: 56px;
+  letter-spacing: 8px;
+  margin-bottom: 10px;
+  text-shadow: 0 0 30px currentColor;
+}
+
+#end-body {
+  font-size: 13px;
+  color: #668866;
+  line-height: 2.2;
+  text-align: center;
+  margin-bottom: 24px;
+  max-width: 500px;
+}
+
+#end-formula {
+  font-size: 11px;
+  color: var(--cyan);
+  border: 1px solid rgba(0,255,204,0.3);
+  padding: 12px 24px;
+  background: rgba(0,255,204,0.04);
+  margin-bottom: 24px;
+  line-height: 2;
+}
+
+#btn-restart {
+  font-family: var(--font-crt);
+  font-size: 18px;
+  letter-spacing: 4px;
+  padding: 12px 40px;
+  color: var(--green);
+  border: 1px solid var(--green);
+  background: transparent;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(0,255,70,0.2);
+  transition: all 0.2s;
+}
+#btn-restart:hover {
+  background: var(--green);
+  color: #000;
+  box-shadow: 0 0 40px rgba(0,255,70,0.6);
+}
+
+/* ─── NOTIFICACIÓN DE IMPACTO ──────────────────────────────── */
+#hit-flash {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 150;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+</style>
+</head>
+<body>
+
+<!-- CANVAS THREEJS -->
+<canvas id="game-canvas"></canvas>
+
+<!-- EFECTO CRT -->
+<div id="crt"></div>
+
+<!-- FLASH DE IMPACTO -->
+<div id="hit-flash"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PANTALLA DE INSTRUCCIONES — BRIEFING DE EMERGENCIA
+     ═══════════════════════════════════════════════════════════ -->
+<div id="screen-intro">
+
+  <div class="intro-alert-bar">
+    ⚠ &nbsp; ТРЕВОГА УРОВЕНЬ 7 — EVACUACIÓN EN CURSO — ТРЕВОГА УРОВЕНЬ 7 &nbsp; ⚠
+  </div>
+
+  <div class="logo">⚛ ЧЕРНОБЫЛЬ ⚛</div>
+  <div class="intro-date-stamp">ЧАЭС · REACTOR RBMK-1000 · 26 ABRIL 1986 · 01:23:40 UTC+3</div>
+
+  <div class="intro-box">
+    <div class="intro-mission">⚠ INFORME DE SITUACIÓN — PROTOCOLO ROJO ACTIVO ⚠</div>
+
+    <!-- DATOS DE LA CRISIS -->
+    <div class="intro-briefing">
+      <div class="data-line">
+        ORIGEN: SALA DE CONTROL Nº4 · OPERADOR: ANATOLY DYATLOV · CLASIFICACIÓN: MUY SECRETO
+      </div>
+      A las <b>01:23:40</b>, el reactor nº4 de la Central Nuclear de Chernóbyl ha sufrido una
+      <em>explosión catastrófica</em>. La deflagración ha lanzado fragmentos del núcleo —
+      bloques de <b>grafito altamente radiactivo</b> — a lo largo de todo el perímetro de la central.<br><br>
+
+      Cada bloque irradia <em>más de 15.000 roentgens por hora</em>. Una dosis letal en menos de
+      <b>60 segundos</b> de exposición directa. Los equipos de bomberos que acudieron a la llamada
+      <em>no sabían que estaban caminando sobre el núcleo del reactor</em>.<br><br>
+
+      <b>TÚ eres el ingeniero de turno.</b> Los sistemas de contención automática han fallado.
+      Quedan <em>50.000 personas en Prypiat</em> que no han sido evacuadas aún. Cada segundo cuenta.
+      Si los bloques no son localizados y neutralizados, <em>la contaminación se extenderá
+      a toda Europa</em>.
+    </div>
+
+    <!-- ESTADÍSTICAS DE VÍCTIMAS (dramatismo) -->
+    <div class="intro-casualties">
+      <div class="casualty-box">
+        <span class="casualty-num" style="animation: blink 1.4s step-end infinite">134</span>
+        <span class="casualty-label">AFECTADOS POR RADIACIÓN AGUDA</span>
+      </div>
+      <div class="casualty-box">
+        <span class="casualty-num">31</span>
+        <span class="casualty-label">FALLECIDOS PRIMERAS SEMANAS</span>
+      </div>
+      <div class="casualty-box">
+        <span class="casualty-num" style="color:var(--amber)">50.000</span>
+        <span class="casualty-label">HABITANTES EN RADIO DE PELIGRO</span>
+      </div>
+      <div class="casualty-box">
+        <span class="casualty-num" style="color:var(--amber)">30 s</span>
+        <span class="casualty-label">TIEMPO QUE TE QUEDA PARA ACTUAR</span>
+      </div>
+    </div>
+
+    <!-- FÍSICA -->
+    <div class="intro-physics">
+      <strong>▌ FÍSICA DEL TIRO PARABÓLICO — LO QUE NECESITAS SABER ▌</strong>
+      x(t) = v₀·cos(θ)·t &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ← el bloque avanza horizontalmente a velocidad constante<br>
+      y(t) = v₀·sin(θ)·t − ½·g·t² &nbsp; ← la gravedad (g=9.8 m/s²) lo frena y lo hace caer<br>
+      R = v₀²·sin(2θ) / g &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ← para maximizar alcance: usa θ = 45°<br>
+      t_vuelo = 2·v₀·sin(θ) / g &nbsp;&nbsp;&nbsp; ← a mayor ángulo o velocidad, más tiempo en el aire
+    </div>
+
+    <!-- REGLAS -->
+    <div class="intro-rules">
+      <div class="rule-box">
+        <b>🎯 OBJETIVO</b>
+        Neutraliza los <b>3 bloques</b> de grafito marcados en rojo en el perímetro.
+      </div>
+      <div class="rule-box">
+        <b>⚡ DISPAROS</b>
+        Dispones de <span class="rule-limit">máximo 5 disparos</span>. Si los agoras sin acertar, la misión fracasa.
+      </div>
+      <div class="rule-box">
+        <b>⏱ TIEMPO</b>
+        Tienes <span class="rule-limit">30 segundos</span>. El contador empieza cuando pulses el botón. No hay tiempo para dudar.
+      </div>
+    </div>
+
+    <!-- BOTÓN DE INICIO -->
+    <button id="btn-start" onclick="startGame()">
+      ▶ &nbsp; PULSA AQUÍ PARA COMENZAR &nbsp; ◀
+    </button>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HUD — INTERFAZ DE JUEGO
+     ═══════════════════════════════════════════════════════════ -->
+
+<!-- Panel Física -->
+<div class="panel" id="panel-physics">
+  <div class="panel-title">// CÁLCULOS FÍSICOS //</div>
+  <div>ÁNGULO θ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="val" id="d-angle">45</span>°</div>
+  <div>VELOCIDAD v₀ &nbsp; <span class="val" id="d-vel">60</span> m/s</div>
+  <div style="height:6px"></div>
+  <div class="formula-line">x(t) = v₀·cos(θ)·t</div>
+  <div class="formula-line">y(t) = v₀·sin(θ)·t − ½·g·t²</div>
+  <div style="height:6px"></div>
+  <div>ALCANCE CALC &nbsp; <span class="val" id="d-range">--</span> m</div>
+  <div>ALTURA MÁX &nbsp;&nbsp; <span class="val" id="d-hmax">--</span> m</div>
+  <div>T. VUELO &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="val" id="d-time">--</span> s</div>
+  <div>Vx = v₀·cos(θ) &nbsp; <span class="val-green" id="d-vx">--</span> m/s</div>
+  <div>Vy = v₀·sin(θ) &nbsp; <span class="val-green" id="d-vy">--</span> m/s</div>
+</div>
+
+<!-- Panel Estado -->
+<div class="panel" id="panel-status">
+  <div class="panel-title">// ESTADO MISIÓN //</div>
+  <div>OBJETIVOS &nbsp; <span class="val" id="d-score">0</span>/3</div>
+  <div>DISPAROS &nbsp;&nbsp; <span class="val" id="d-shots">0</span>/5</div>
+  <div id="feedback-line">SISTEMA LISTO</div>
+  <div class="small-info">
+    ЧАЭС — REACTOR RBMK-1000<br>
+    FECHA: 26-04-1986 &nbsp; 01:23:40<br>
+    NIVEL RAD: <span style="color:var(--red); animation: blink 1s step-end infinite">■ CRÍTICO</span>
+  </div>
+</div>
+
+<!-- Panel Cuenta Atrás (centro-superior) -->
+<div class="panel" id="panel-timer">
+  <div class="timer-label">TIEMPO RESTANTE</div>
+  <div id="timer-display">60</div>
+  <div class="timer-label">SEGUNDOS</div>
+  <div id="shots-remaining">
+    <div class="shot-pip" id="sp-0"></div>
+    <div class="shot-pip" id="sp-1"></div>
+    <div class="shot-pip" id="sp-2"></div>
+    <div class="shot-pip" id="sp-3"></div>
+    <div class="shot-pip" id="sp-4"></div>
+  </div>
+  <div class="timer-label" style="margin-top:3px;">DISPAROS</div>
+</div>
+
+<!-- Panel Controles -->
+<div class="panel" id="panel-controls">
+  <div class="panel-title">// PANEL DE LANZAMIENTO //</div>
+
+  <div id="target-indicators">
+    <div class="target-dot" id="td-0"></div>
+    <div class="target-dot" id="td-1"></div>
+    <div class="target-dot" id="td-2"></div>
+    <span style="font-size:9px; color:#334433; letter-spacing:2px; margin-left:8px;">
+      OBJETIVOS DESTRUIDOS
+    </span>
+  </div>
+
+  <div class="controls-row">
+    <div class="slider-group">
+      <div class="slider-label">ÁNGULO DE LANZAMIENTO</div>
+      <div class="slider-val"><span id="lbl-angle">45</span>°</div>
+      <input type="range" id="sl-angle" min="5" max="85" value="45" oninput="updateParams()">
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-launch" id="btn-launch" onclick="launchProjectile()">
+      ⚡ DISPARAR
+    </button>
+    <div class="divider"></div>
+    <div class="slider-group">
+      <div class="slider-label">VELOCIDAD INICIAL</div>
+      <div class="slider-val"><span id="lbl-vel">60</span> m/s</div>
+      <input type="range" id="sl-vel" min="5" max="60" value="30" oninput="updateParams()">
+    </div>
+  </div>
+
+  <div class="hint-text">
+    Ajusta θ y v₀ · La línea verde muestra la trayectoria predicha · Apunta a los anillos rojos
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PANTALLA FINAL
+     ═══════════════════════════════════════════════════════════ -->
+<div id="screen-end">
+  <div id="end-title">✓ MISIÓN CUMPLIDA</div>
+  <div id="end-body"></div>
+  <div id="end-formula">
+    R = v₀²·sin(2θ) / g &nbsp;|&nbsp; Para θ=45°: R_max = v₀²/g<br>
+    La física del movimiento parabólico rige el alcance.<br>
+    Ángulo complementarios (θ y 90°-θ) producen el mismo alcance R.
+  </div>
+  <button id="btn-restart" onclick="resetGame()">↺ REINICIAR PROTOCOLO</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     THREE.JS + JUEGO
+     ═══════════════════════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════════════
+   REACTOR Nº4 — TIRO PARABÓLICO DE GRAFITO
+   ─────────────────────────────────────────────────────────────
+   Nivel: 4º ESO (15-16 años)
+   Concepto: Movimiento de Proyectil (Tiro Parabólico)
+   ══════════════════════════════════════════════════════════════ */
+
+// ── CONSTANTES FÍSICAS ───────────────────────────────────────
+const G         = 9.8;    // Aceleración gravitacional (m/s²)
+const SCALE     = 0.18;   // Factor escala: 1 Three.js unit ≈ 5.5 m reales
+const DT        = 2/60;   // Paso de tiempo de simulación (s)
+const MAX_SHOTS = 5;      // Máximo de disparos permitidos
+const TIME_LIMIT = 60;    // Segundos disponibles por ronda
+
+// ── POSICIONES REALES DE OBJETIVOS (metros) ──────────────────
+const TARGET_DATA = [
+  { x_real: 55, z_real:  3, label: 'A' },
+  { x_real: 85, z_real: -2, label: 'B' },
+  { x_real:115, z_real:  4, label: 'C' }
+];
+const TARGET_HIT_RADIUS = 5.5; // metros
+
+// ── ESTADO GLOBAL ────────────────────────────────────────────
+let scene, camera, renderer, clock;
+let objects = {};          // geometrías reutilizables
+let projectileMesh = null;
+let previewLine = null;
+let trailLine = null;
+let trailPts = [];
+let targets = [];
+let score = 0, shots = 0;
+let flying = false;
+let gameRunning = false;
+let reactorPulse = 0;
+// Cuenta atrás
+let timeLeft = TIME_LIMIT;
+let countdownInterval = null;
+
+// Parámetros controlados por el jugador
+let angleDeg = 45;
+let velMs    = 30;
+
+// ──────────────────────────────────────────────────────────────
+//  INICIALIZACIÓN DE THREE.JS
+// ──────────────────────────────────────────────────────────────
+function initThree() {
+  const canvas = document.getElementById('game-canvas');
+
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0x020802);
+
+  // Escena
+  scene = new THREE.Scene();
+
+  // ── NIEBLA ATMOSFÉRICA (efecto Chernobyl) ──────────────
+  // La niebla exponencial crea la sensación de contaminación densa
+  scene.fog = new THREE.FogExp2(0x020802, 0.008);
+
+  // Reloj para animaciones
+  clock = new THREE.Clock();
+
+  // Cámara perspectiva
+  camera = new THREE.PerspectiveCamera(
+    65,
+    window.innerWidth / window.innerHeight,
+    0.1, 600
+  );
+  camera.position.set(-6, 9, 18);
+  camera.lookAt(18, 2, 0);
+
+  buildEnvironment();
+  buildTargets();
+  buildPreviewLine();
+  updateParams();
+  renderLoop();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  ENTORNO 3D — INTERIOR/EXTERIOR DE LA CENTRAL
+// ──────────────────────────────────────────────────────────────
+function buildEnvironment() {
+
+  // ── SUELO (hormigón agrietado) ─────────────────────────
+  const floorGeo = new THREE.PlaneGeometry(600, 150, 60, 15);
+  const floorMat = new THREE.MeshLambertMaterial({ color: 0x111511 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Cuadrícula de medición (cada línea = 10 metros)
+  const grid = new THREE.GridHelper(600, 120, 0x002208, 0x001106);
+  grid.position.y = 0.01;
+  scene.add(grid);
+
+  // ── EDIFICIO DEL REACTOR (fondo izquierdo) ─────────────
+  addBox(scene, 45, 22, 25, -30, 11, -12, 0x252825);
+  // Sarcófago dañado (techo partido)
+  addBox(scene, 22, 6, 24, -22, 25, -12, 0x1a1f1a);
+
+  // Chimeneas
+  addCylinder(scene, 1.2, 2, 35, 8, -8, 17.5, 8, 0x2a2a2a);
+  addCylinder(scene, 0.8, 1.2, 25, 8, -18, 12.5, 10, 0x222222);
+
+  // Torre de enfriamiento (fondo derecho)
+  addCylinder(scene, 5, 9, 25, 16, 70, 12.5, -15, 0x1e221e);
+
+  // ── EDIFICIOS AUXILIARES ───────────────────────────────
+  addBox(scene, 30, 10, 15, 20, 5, -18, 0x1d211d);
+  addBox(scene, 15, 7, 12, 55, 3.5, -20, 0x181c18);
+
+  // ── PLATAFORMA DE LANZAMIENTO ─────────────────────────
+  addBox(scene, 4, 0.6, 4, 0, 0.3, 0, 0x3a3a1a);
+  addBox(scene, 0.6, 0.6, 0.6, 0, 0.9, 0, 0x4a4a2a);
+
+  // Indicador de ángulo (flecha dinámica)
+  const arrowGeo = new THREE.ConeGeometry(0.25, 1.2, 6);
+  const arrowMat = new THREE.MeshLambertMaterial({
+    color: 0xffb300, emissive: 0x442200
+  });
+  objects.arrow = new THREE.Mesh(arrowGeo, arrowMat);
+  objects.arrow.position.set(0, 1.5, 0);
+  scene.add(objects.arrow);
+
+  // ── MARCADORES DE DISTANCIA ────────────────────────────
+  for (let d = 20; d <= 150; d += 10) {
+    const markerGeo = new THREE.BoxGeometry(0.08, 0.015, 3);
+    const markerMat = new THREE.MeshBasicMaterial({ color: 0x001a08 });
+    const marker = new THREE.Mesh(markerGeo, markerMat);
+    marker.position.set(d * SCALE, 0.02, 0);
+    scene.add(marker);
+  }
+
+  // ── ESCOMBROS DECORATIVOS ──────────────────────────────
+  const rubblePositions = [
+    [2.5,0.15,2], [-1,0.1,-3], [4,0.2,-1.5],
+    [7,0.1,2.5], [10,0.2,-2], [15,0.15,3]
+  ];
+  rubblePositions.forEach(([x,y,z]) => {
+    const s = 0.2 + Math.random()*0.3;
+    addBox(scene, s, s*0.7, s, x, y, z, 0x252525);
+  });
+
+  // ── ILUMINACIÓN DRAMÁTICA ─────────────────────────────
+
+  // Luz ambiente (muy baja, noche)
+  scene.add(new THREE.AmbientLight(0x010e03, 0.5));
+
+  // Luz verde fósforo (pantalla de control)
+  const phosphor = new THREE.PointLight(0x00ff46, 1.2, 25);
+  phosphor.position.set(0, 6, 6);
+  scene.add(phosphor);
+
+  // Luz de alerta roja (reactor dañado)
+  objects.reactorLight = new THREE.PointLight(0xff1a00, 2.5, 70);
+  objects.reactorLight.position.set(-28, 10, -5);
+  scene.add(objects.reactorLight);
+
+  // Luz ámbar industrial (exterior)
+  const amber = new THREE.PointLight(0xffb300, 1.0, 100);
+  amber.position.set(60, 18, 5);
+  scene.add(amber);
+
+  // Luz azul Cherenkov (reactor)
+  objects.cherenkovLight = new THREE.PointLight(0x0077ff, 2.8, 45);
+  objects.cherenkovLight.position.set(-25, 14, -8);
+  scene.add(objects.cherenkovLight);
+
+  // Luz puntual sobre la plataforma
+  const launchLight = new THREE.PointLight(0x00ff46, 0.8, 15);
+  launchLight.position.set(0, 8, 0);
+  scene.add(launchLight);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  OBJETIVOS
+// ──────────────────────────────────────────────────────────────
+function buildTargets() {
+  targets = [];
+
+  TARGET_DATA.forEach((td, i) => {
+    const x3 = td.x_real * SCALE;
+    const z3 = td.z_real * SCALE;
+
+    // Anillo exterior (alerta)
+    const outerR  = TARGET_HIT_RADIUS * SCALE;
+    const ringGeo = new THREE.RingGeometry(outerR * 0.7, outerR, 48);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xff2200, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.75
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x3, 0.04, z3);
+    scene.add(ring);
+
+    // Anillo interior (crosshair)
+    const innerGeo = new THREE.RingGeometry(outerR * 0.1, outerR * 0.2, 32);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xff6600, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.9
+    });
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    inner.rotation.x = -Math.PI / 2;
+    inner.position.set(x3, 0.05, z3);
+    scene.add(inner);
+
+    // Luz de objetivo
+    const tLight = new THREE.PointLight(0xff2200, 1.8, 14);
+    tLight.position.set(x3, 0.5, z3);
+    scene.add(tLight);
+
+    // Poste de señalización
+    addCylinder(scene, 0.04, 0.04, 4, 6, x3, 2, z3, 0xff2200);
+
+    // Letrero del objetivo (palo horizontal)
+    addBox(scene, 0.8, 0.4, 0.04, x3, 4.2, z3, 0xcc1100);
+
+    targets.push({
+      x_real: td.x_real, z_real: td.z_real,
+      label: td.label, ring, tLight, hit: false, idx: i
+    });
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+//  LÍNEA DE PREVISUALIZACIÓN DE TRAYECTORIA
+// ──────────────────────────────────────────────────────────────
+function buildPreviewLine() {
+  const mat = new THREE.LineBasicMaterial({
+    color: 0x00ff46, transparent: true, opacity: 0.25
+  });
+  previewLine = new THREE.Line(new THREE.BufferGeometry(), mat);
+  scene.add(previewLine);
+}
+
+function redrawPreviewLine(theta, tFlight) {
+  /* ── TRAYECTORIA CALCULADA CON LAS ECUACIONES DEL MOVIMIENTO ──
+     Muestreamos N puntos entre t=0 y t=t_vuelo
+     x(t) = v₀·cos(θ)·t
+     y(t) = v₀·sin(θ)·t − ½·g·t²
+     z = 0 (lanzamiento en plano 2D, proyección en el plano XY)      */
+  const N = 80;
+  const v0x = velMs * Math.cos(theta);
+  const v0y = velMs * Math.sin(theta);
+  const pts = [];
+
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * tFlight;
+    const xR = v0x * t;
+    const yR = v0y * t - 0.5 * G * t * t;
+    if (yR < 0) break;
+    pts.push(new THREE.Vector3(xR * SCALE, yR * SCALE, 0));
+  }
+
+  if (pts.length >= 2) {
+    previewLine.geometry.dispose();
+    previewLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+    previewLine.material.opacity = 0.25;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  ACTUALIZAR PARÁMETROS (llamado desde sliders)
+// ──────────────────────────────────────────────────────────────
+function updateParams() {
+  angleDeg = parseFloat(document.getElementById('sl-angle').value);
+  velMs    = parseFloat(document.getElementById('sl-vel').value);
+
+  // Etiquetas de slider
+  document.getElementById('lbl-angle').textContent = angleDeg;
+  document.getElementById('lbl-vel').textContent   = velMs;
+
+  // HUD física
+  document.getElementById('d-angle').textContent = angleDeg;
+  document.getElementById('d-vel').textContent   = velMs;
+
+  // ── CÁLCULO DE MAGNITUDES FÍSICAS ────────────────────────────
+  const theta = angleDeg * Math.PI / 180;   // radianes
+
+  // Componentes de la velocidad inicial
+  const v0x = velMs * Math.cos(theta);       // Vx = v₀·cos(θ)  (m/s)
+  const v0y = velMs * Math.sin(theta);       // Vy = v₀·sin(θ)  (m/s)
+
+  // Tiempo de vuelo total: t = 2·v₀·sin(θ) / g
+  const tFlight = (2 * v0y) / G;
+
+  // Alcance horizontal: R = v₀²·sin(2θ) / g
+  const R = (velMs * velMs * Math.sin(2 * theta)) / G;
+
+  // Altura máxima: H = v₀²·sin²(θ) / (2g)
+  const H = (velMs * velMs * Math.pow(Math.sin(theta), 2)) / (2 * G);
+
+  // Actualizar HUD
+  document.getElementById('d-range').textContent = R.toFixed(1);
+  document.getElementById('d-hmax').textContent  = H.toFixed(1);
+  document.getElementById('d-time').textContent  = tFlight.toFixed(2);
+  document.getElementById('d-vx').textContent    = v0x.toFixed(1);
+  document.getElementById('d-vy').textContent    = v0y.toFixed(1);
+
+  // Rotar flecha indicadora de ángulo
+  if (objects.arrow) {
+    objects.arrow.rotation.z = -(Math.PI / 2 - theta);
+  }
+
+  // Actualizar línea de previsualización
+  redrawPreviewLine(theta, tFlight);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  LANZAR PROYECTIL
+// ──────────────────────────────────────────────────────────────
+function launchProjectile() {
+  if (flying || !gameRunning) return;
+  if (shots >= MAX_SHOTS) return;  // no quedan disparos
+
+  shots++;
+  document.getElementById('d-shots').textContent = shots;
+
+  // Marcar pip de disparo como usado
+  document.getElementById(`sp-${shots - 1}`).classList.add('used');
+  setFeedback('PROYECTIL EN VUELO...', 'amber');
+  document.getElementById('btn-launch').disabled = true;
+
+  // Deshabilitar botón si ya no quedan más disparos tras éste
+  if (shots >= MAX_SHOTS) {
+    document.getElementById('btn-launch').disabled = true;
+  }
+
+  // Limpiar proyectil anterior
+  if (projectileMesh) { scene.remove(projectileMesh); projectileMesh = null; }
+  clearTrail();
+
+  // ── CREAR BLOQUE DE GRAFITO ───────────────────────────────
+  const geoGraf = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+  const matGraf = new THREE.MeshLambertMaterial({
+    color: 0x1a1a1a, emissive: 0x050f05
+  });
+  projectileMesh = new THREE.Mesh(geoGraf, matGraf);
+  projectileMesh.castShadow = true;
+  projectileMesh.position.set(0, 0.8, 0);
+  scene.add(projectileMesh);
+
+  // ── PARÁMETROS FÍSICOS DEL LANZAMIENTO ───────────────────
+  const theta = angleDeg * Math.PI / 180;
+  const v0x   = velMs * Math.cos(theta);    // componente horizontal (m/s)
+  const v0y   = velMs * Math.sin(theta);    // componente vertical   (m/s)
+  let   t     = 0;                          // tiempo transcurrido   (s)
+
+  flying = true;
+
+  // ── SIMULACIÓN PASO A PASO ────────────────────────────────
+  function step() {
+    if (!flying) return;
+
+    t += DT;   // avanzar 1 fotograma (≈1/60 s)
+
+    // ── ECUACIONES DE POSICIÓN ──────────────────────────────
+    // Movimiento horizontal UNIFORME (no hay fricción del aire):
+    const x_m = v0x * t;                           // x(t) = v₀·cos(θ)·t
+
+    // Movimiento vertical UNIFORMEMENTE ACELERADO:
+    const y_m = v0y * t - 0.5 * G * t * t;         // y(t) = v₀·sin(θ)·t − ½·g·t²
+
+    // ── CONVERTIR A UNIDADES THREE.JS ──────────────────────
+    projectileMesh.position.x = x_m * SCALE;
+    projectileMesh.position.y = y_m * SCALE + 0.5 * SCALE;
+    projectileMesh.position.z = 0;   // lanzamiento 2D en plano XZ=0
+
+    // Rotación estética del bloque
+    projectileMesh.rotation.z += 0.07;
+    projectileMesh.rotation.x += 0.04;
+
+    // Añadir punto al rastro
+    addTrailPoint(new THREE.Vector3(
+      projectileMesh.position.x,
+      projectileMesh.position.y,
+      projectileMesh.position.z
+    ));
+
+    // ── DETECCIÓN DE IMPACTO EN EL SUELO ───────────────────
+    if (y_m <= 0 && t > 0.05) {
+      onProjectileLanded(x_m, 0);   // x_m = posición real de impacto en metros
+      return;
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  step();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  RASTRO DE TRAYECTORIA REAL
+// ──────────────────────────────────────────────────────────────
+function addTrailPoint(pos) {
+  trailPts.push(pos.clone());
+  if (trailPts.length < 2) return;
+
+  if (trailLine) scene.remove(trailLine);
+  const geo = new THREE.BufferGeometry().setFromPoints(trailPts);
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xff6600, transparent: true, opacity: 0.55
+  });
+  trailLine = new THREE.Line(geo, mat);
+  scene.add(trailLine);
+}
+
+function clearTrail() {
+  trailPts = [];
+  if (trailLine) { scene.remove(trailLine); trailLine = null; }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  CUANDO EL PROYECTIL TOCA EL SUELO
+// ──────────────────────────────────────────────────────────────
+function onProjectileLanded(x_impact, z_impact) {
+  flying = false;
+  // Re-habilitar disparo sólo si quedan intentos
+  if (shots < MAX_SHOTS) {
+    document.getElementById('btn-launch').disabled = false;
+  }
+
+  // ── VERIFICAR IMPACTO EN OBJETIVOS ────────────────────────
+  let gotHit = false;
+  targets.forEach(tgt => {
+    if (tgt.hit) return;
+
+    // Distancia entre impacto y centro del objetivo (metros reales)
+    const dx   = x_impact - tgt.x_real;
+    const dz   = 0 - tgt.z_real;          // z_impact fijado a 0 (simplificación 2D)
+    const dist = Math.sqrt(dx*dx + dz*dz);
+
+    if (dist <= TARGET_HIT_RADIUS) {
+      // ¡IMPACTO DIRECTO!
+      tgt.hit = true;
+      score++;
+      gotHit  = true;
+
+      // Feedback visual: anillo cambia a verde
+      tgt.ring.material.color.setHex(0x00ff46);
+      tgt.ring.material.opacity = 0.5;
+      tgt.tLight.color.setHex(0x00ff46);
+
+      // Indicador HUD
+      document.getElementById(`td-${tgt.idx}`).classList.add('hit');
+      document.getElementById('d-score').textContent = score;
+
+      setFeedback(`✓ OBJETIVO ${tgt.label} NEUTRALIZADO  Δ=${dist.toFixed(1)}m`, 'green');
+
+      // Efecto de explosión
+      spawnExplosion(tgt.x_real * SCALE, 0.3, tgt.z_real * SCALE);
+      flashScreen(0.3, 0.12);
+    }
+  });
+
+  if (!gotHit) {
+    const nearestDist = Math.min(...targets.filter(t => !t.hit).map(t => Math.abs(x_impact - t.x_real)));
+    setFeedback(`✗ FALLO — impacto en x=${x_impact.toFixed(1)}m  (Δ≈${nearestDist.toFixed(0)}m al objetivo)`, 'red');
+  }
+
+  // Eliminar malla del proyectil tras breve pausa
+  setTimeout(() => {
+    if (projectileMesh) { scene.remove(projectileMesh); projectileMesh = null; }
+  }, 600);
+
+  // ── VICTORIA ─────────────────────────────────────────────
+  if (score >= 3) {
+    stopCountdown();
+    setTimeout(showVictory, 1200);
+    return;
+  }
+
+  // ── DISPAROS AGOTADOS ────────────────────────────────────
+  if (shots >= MAX_SHOTS) {
+    setTimeout(() => showFailure('DISPAROS AGOTADOS'), 900);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  EXPLOSIÓN DE PARTÍCULAS
+// ──────────────────────────────────────────────────────────────
+function spawnExplosion(x, y, z) {
+  const count = 24;
+  const particles = [];
+
+  for (let i = 0; i < count; i++) {
+    const size = 0.05 + Math.random() * 0.12;
+    const geo  = new THREE.SphereGeometry(size, 4, 4);
+    const col  = i % 3 === 0 ? 0xff6600 : (i % 3 === 1 ? 0xffb300 : 0xff2200);
+    const mat  = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 });
+    const p    = new THREE.Mesh(geo, mat);
+    p.position.set(x, y, z);
+    const spd = 0.06 + Math.random() * 0.18;
+    const phi = Math.random() * Math.PI * 2;
+    const elv = Math.random() * Math.PI;
+    p.userData.vel = new THREE.Vector3(
+      spd * Math.sin(elv) * Math.cos(phi),
+      spd * Math.cos(elv) * 0.5 + 0.08,
+      spd * Math.sin(elv) * Math.sin(phi)
+    );
+    scene.add(p);
+    particles.push(p);
+  }
+
+  let life = 0;
+  function animExp() {
+    life++;
+    particles.forEach(p => {
+      p.position.add(p.userData.vel);
+      p.userData.vel.y -= 0.004;
+      p.material.opacity = Math.max(0, 1 - life / 45);
+    });
+    if (life < 45) requestAnimationFrame(animExp);
+    else particles.forEach(p => scene.remove(p));
+  }
+  animExp();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  FLASH DE PANTALLA
+// ──────────────────────────────────────────────────────────────
+function flashScreen(opacity, duration) {
+  const el = document.getElementById('hit-flash');
+  el.style.background = `rgba(255,100,0,${opacity})`;
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, duration * 1000);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  BUCLE PRINCIPAL DE RENDERIZADO
+// ──────────────────────────────────────────────────────────────
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+
+  const elapsed = clock.getElapsedTime();
+
+  // ── ANIMACIÓN DE LUCES ────────────────────────────────────
+  if (objects.reactorLight) {
+    // Parpadeo irregular del reactor (efecto dramatismo)
+    objects.reactorLight.intensity =
+      1.5 + Math.sin(elapsed * 2.3) * 0.8 + Math.sin(elapsed * 7.1) * 0.4;
+  }
+  if (objects.cherenkovLight) {
+    objects.cherenkovLight.intensity =
+      2 + Math.sin(elapsed * 1.7) * 1.2;
+  }
+
+  // ── MOVIMIENTO DE CÁMARA ───────────────────────────────────
+  if (!flying && gameRunning) {
+    // Panorámica lenta cuando no hay proyectil en vuelo
+    camera.position.x = -6 + Math.sin(elapsed * 0.12) * 4;
+    camera.position.y = 9  + Math.sin(elapsed * 0.08) * 1;
+    camera.lookAt(22, 2, 0);
+  } else if (flying && projectileMesh) {
+    // Seguir al proyectil
+    const px = projectileMesh.position.x;
+    const py = projectileMesh.position.y;
+    camera.position.x = px - 6;
+    camera.position.y = Math.max(6, py + 4);
+    camera.position.z = 18;
+    camera.lookAt(projectileMesh.position);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  FEEDBACK HUD
+// ──────────────────────────────────────────────────────────────
+function setFeedback(msg, tone) {
+  const el = document.getElementById('feedback-line');
+  el.textContent = msg;
+  const colors = { green: 'var(--green)', amber: 'var(--amber)', red: 'var(--red)' };
+  el.style.color = colors[tone] || 'var(--red)';
+}
+
+// ──────────────────────────────────────────────────────────────
+//  CUENTA ATRÁS
+// ──────────────────────────────────────────────────────────────
+function startCountdown() {
+  timeLeft = TIME_LIMIT;
+  updateTimerDisplay();
+
+  countdownInterval = setInterval(() => {
+    if (!gameRunning) { stopCountdown(); return; }
+    timeLeft--;
+    updateTimerDisplay();
+
+    if (timeLeft <= 0) {
+      stopCountdown();
+      showFailure('TIEMPO AGOTADO');
+    }
+  }, 1000);
+}
+
+function stopCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
+
+function updateTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  el.textContent = timeLeft;
+  el.className = '';  // reset clases
+  if (timeLeft <= 5)       el.classList.add('critical');
+  else if (timeLeft <= 12) el.classList.add('warn');
+
+  // Flash de pantalla cuando quedan pocos segundos
+  if (timeLeft <= 5 && timeLeft > 0) {
+    flashScreen(0.06, 0.2);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  FRACASO (tiempo agotado o disparos agotados)
+// ──────────────────────────────────────────────────────────────
+function showFailure(reason) {
+  if (!gameRunning) return;
+  gameRunning = false;
+  stopCountdown();
+  flying = false;
+  if (projectileMesh) { scene.remove(projectileMesh); projectileMesh = null; }
+
+  const screen = document.getElementById('screen-end');
+  const title  = document.getElementById('end-title');
+  const body   = document.getElementById('end-body');
+
+  title.textContent = '✗ MISIÓN FALLIDA';
+  title.style.color = 'var(--red)';
+
+  const hitList = ['A','B','C'].filter((_,i) => targets[i] && targets[i].hit);
+  body.innerHTML = `
+    <span style="color:var(--red); font-size:16px; letter-spacing:2px;">${reason}</span><br><br>
+    Objetivos neutralizados: <span style="color:var(--amber)">${score} / 3</span><br>
+    Disparos utilizados: <span style="color:var(--amber)">${shots} / ${MAX_SHOTS}</span><br>
+    Tiempo restante: <span style="color:var(--amber)">${timeLeft}s</span><br>
+    <br>
+    <span style="color:#553333; font-size:11px;">
+    Prypiat no pudo ser evacuada a tiempo.<br>
+    <em style="color:#774444">Recuerda: R = v₀²·sin(2θ)/g — a θ=45° obtienes el máximo alcance.</em><br>
+    Analiza los ángulos y velocidades correctos antes de disparar.
+    </span>
+  `;
+
+  screen.style.display = 'flex';
+  flashScreen(0.5, 0.8);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  VICTORIA
+// ──────────────────────────────────────────────────────────────
+function showVictory() {
+  const screen = document.getElementById('screen-end');
+  const title  = document.getElementById('end-title');
+  const body   = document.getElementById('end-body');
+
+  title.textContent = '✓ MISIÓN CUMPLIDA';
+  title.style.color = 'var(--green)';
+
+  const efficiency = Math.round((3 / shots) * 100);
+  const timeUsed = TIME_LIMIT - timeLeft;
+  body.innerHTML = `
+    Objetivos neutralizados: <span style="color:var(--green)">3 / 3</span><br>
+    Disparos realizados: <span style="color:var(--amber)">${shots} / ${MAX_SHOTS}</span><br>
+    Tiempo empleado: <span style="color:var(--amber)">${timeUsed}s</span><br>
+    Eficiencia: <span style="color:var(--amber)">${efficiency}%</span><br>
+    <br>
+    <span style="color:#556655; font-size:11px;">
+    Has demostrado dominio del tiro parabólico.<br>
+    El alcance R depende del ángulo θ y la velocidad v₀.<br>
+    Ángulo óptimo para alcance máximo: θ = 45°
+    </span>
+  `;
+
+  screen.style.display = 'flex';
+  gameRunning = false;
+}
+
+// ──────────────────────────────────────────────────────────────
+//  REINICIAR
+// ──────────────────────────────────────────────────────────────
+function resetGame() {
+  document.getElementById('screen-end').style.display = 'none';
+  stopCountdown();
+
+  // Limpiar proyectil y rastro
+  if (projectileMesh) { scene.remove(projectileMesh); projectileMesh = null; }
+  clearTrail();
+
+  // Eliminar objetivos viejos
+  targets.forEach(t => { scene.remove(t.ring); scene.remove(t.tLight); });
+
+  // Resetear estado
+  score = 0; shots = 0; flying = false;
+  document.getElementById('d-score').textContent = '0';
+  document.getElementById('d-shots').textContent = '0';
+  setFeedback('SISTEMA LISTO', 'red');
+
+  // Resetear indicadores HUD
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`td-${i}`).classList.remove('hit');
+  }
+  // Resetear pips de disparos
+  for (let i = 0; i < MAX_SHOTS; i++) {
+    document.getElementById(`sp-${i}`).classList.remove('used');
+  }
+
+  buildTargets();
+  gameRunning = true;
+  updateParams();
+  startCountdown();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  INICIO DEL JUEGO
+// ──────────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('screen-intro').style.display = 'none';
+  initThree();
+  gameRunning = true;
+  startCountdown();
+}
+
+// ──────────────────────────────────────────────────────────────
+//  RESPONSIVE
+// ──────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  if (!renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ──────────────────────────────────────────────────────────────
+//  HELPERS DE GEOMETRÍA
+// ──────────────────────────────────────────────────────────────
+function addBox(scene, w, h, d, x, y, z, col) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color: col })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  scene.add(m);
+  return m;
+}
+
+function addCylinder(scene, rTop, rBot, h, segs, x, y, z, col) {
+  const m = new THREE.Mesh(
+    new THREE.CylinderGeometry(rTop, rBot, h, segs),
+    new THREE.MeshLambertMaterial({ color: col })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  scene.add(m);
+  return m;
+}
+</script>
+</body>
+</html>
